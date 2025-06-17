@@ -263,7 +263,7 @@ if uploaded_image: # Check for the new variable name
             stream.width = video_w
             stream.height = video_h
             stream.pix_fmt = 'yuv420p'
-            stream.options = {'crf': '18'}
+            stream.options = {'crf': '18', 'g': '1'}
 
             vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             for idx in range(total_frames):
