@@ -256,19 +256,30 @@ if uploaded_image: # Check for the new variable name
                 if processed is None:
                     continue  # Defensive: skip if processing failed
 
-                # Ensure 3 channels (BGR)
+                # --- Robust shape/channel/type handling ---
+                # If BGRA, convert to BGR
                 if processed.ndim == 3 and processed.shape[2] == 4:
                     processed = cv2.cvtColor(processed, cv2.COLOR_BGRA2BGR)
-                elif processed.ndim == 2 or processed.shape[2] != 3:
-                    # Defensive: skip frames with unexpected shape
+                # If grayscale, convert to BGR
+                elif processed.ndim == 2:
+                    processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
+                # If not 3 channels, skip
+                elif processed.ndim != 3 or processed.shape[2] != 3:
+                    print(f"Skipping frame {idx}: unexpected shape {processed.shape}")
                     continue
 
                 # Ensure uint8
                 if processed.dtype != np.uint8:
                     processed = processed.astype(np.uint8)
 
-                # Convert to RGB for PyAV
+                # Convert BGR to RGB for PyAV
                 frame_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
+
+                # Double-check shape before writing
+                if frame_rgb.shape != (video_h, video_w, 3):
+                    print(f"Skipping frame {idx}: shape mismatch {frame_rgb.shape} vs expected {(video_h, video_w, 3)}")
+                    continue
+
                 av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24')
                 for packet in stream.encode(av_frame):
                     container.mux(packet)
