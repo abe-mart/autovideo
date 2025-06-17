@@ -268,7 +268,7 @@ if uploaded_image: # Check for the new variable name
             vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             for idx in range(total_frames):
                 success, original_frame = vid_capture.read()
-                if not success or frame is None:
+                if not success or original_frame is None:
                     st.warning(f"⚠️ Could not read frame {idx}. Skipping.")
                     continue
 
