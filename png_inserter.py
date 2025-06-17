@@ -198,7 +198,7 @@ if uploaded_image: # Check for the new variable name
                 if dest_corners is not None:
                     M = cv2.getPerspectiveTransform(image_src_corners, dest_corners)
                     warped_image = cv2.warpPerspective(
-                        image_to_insert, M, (video_w, video_h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_TRANSPARENT
+                        image_to_insert, M, (video_w, video_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT
                     )
                     
                     # Perform blending
@@ -329,107 +329,107 @@ if uploaded_image: # Check for the new variable name
             #     container.mux(packet)
             # container.close()
             # Cloud: Process and write each frame sequentially
-            container = av.open(output_video_path, mode='w')
-            stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
-            stream.width = video_w
-            stream.height = video_h
-            stream.pix_fmt = 'yuv420p'
-            stream.options = {'crf': '18'}
-
-            vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            progress_bar = st.progress(0, "Running Test 2: Isolate Alpha Blending...")
-
-            for idx in range(total_frames):
-                success, frame = vid_capture.read()
-                if not success or frame is None:
-                    st.warning(f"⚠️ Could not read frame {idx}. Skipping.")
-                    continue
-
-                # --- Use the NEW test function ---
-                processed_frame = process_frame_test2((idx, frame))
-
-                # --- Convert and Write the Frame ---
-                # Convert BGR (OpenCV) to RGB for PyAV
-                frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                
-                # Ensure contiguous memory
-                contiguous_frame_rgb = np.ascontiguousarray(frame_rgb)
-                
-                # Write the frame
-                av_frame = av.VideoFrame.from_ndarray(contiguous_frame_rgb, format='rgb24')
-                for packet in stream.encode(av_frame):
-                    container.mux(packet)
-
-                if idx % 5 == 0 or idx == total_frames - 1:
-                    progress_bar.progress((idx + 1) / total_frames, f"Testing frame {idx + 1}/{total_frames}")
-            
-            # Flush and close
-            for packet in stream.encode():
-                container.mux(packet)
-            container.close()
-            # # Cloud: Process and write each frame sequentially to save memory
-            # progress_bar = st.progress(0, "Processing and encoding video (cloud mode)...")
             # container = av.open(output_video_path, mode='w')
             # stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
             # stream.width = video_w
             # stream.height = video_h
             # stream.pix_fmt = 'yuv420p'
-            # stream.options = {'crf': '18', 'g': '1'}
+            # stream.options = {'crf': '18'}
 
             # vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            # progress_bar = st.progress(0, "Running Test 2: Isolate Alpha Blending...")
+
             # for idx in range(total_frames):
-            #     success, original_frame = vid_capture.read()
-            #     if not success or original_frame is None:
+            #     success, frame = vid_capture.read()
+            #     if not success or frame is None:
             #         st.warning(f"⚠️ Could not read frame {idx}. Skipping.")
             #         continue
 
-            #     # Create a defensive copy to guarantee it's a new, isolated object in memory.
-            #     frame_to_process = original_frame.copy()
+            #     # --- Use the NEW test function ---
+            #     processed_frame = process_frame_test2((idx, frame))
 
-            #     # Pass the pristine copy to the processing function
-            #     # _, processed_frame = process_frame((idx, frame_to_process))
-            #     processed_frame = process_frame_test2((idx, frame_to_process))
-
-            #     if processed_frame is None:
-            #         st.warning(f"⚠️ Processing failed for frame {idx}. Re-using original frame.")
-            #         processed_frame = original_frame # Fallback to the original frame to prevent flicker/gaps
-
-            #     # --- Robust Conversion for PyAV ---
-            #     # 1. Ensure the processed frame is uint8
-            #     if processed_frame.dtype != np.uint8:
-            #         processed_frame = processed_frame.clip(0, 255).astype(np.uint8)
-
-            #     # 2. Ensure it has 3 channels (it should after process_frame)
-            #     if processed_frame.ndim != 3 or processed_frame.shape[2] != 3:
-            #         st.warning(f"⚠️ Processed frame {idx} has wrong dimensions {processed_frame.shape}. Skipping.")
-            #         continue
-
-            #     # 3. **Crucially, convert the final BGR frame to RGB for PyAV**
-            #     try:
-            #         frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-            #     except cv2.error as e:
-            #         st.error(f"Error converting frame {idx} to RGB: {e}")
-            #         continue
-
-            #     # Ensure the frame data is in a C-contiguous block of memory for PyAV.
+            #     # --- Convert and Write the Frame ---
+            #     # Convert BGR (OpenCV) to RGB for PyAV
+            #     frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
+                
+            #     # Ensure contiguous memory
             #     contiguous_frame_rgb = np.ascontiguousarray(frame_rgb)
-
-            #     # Double-check shape before writing
-            #     if contiguous_frame_rgb.shape != (video_h, video_w, 3):
-            #         print(f"Skipping frame {idx}: shape mismatch {contiguous_frame_rgb.shape} vs expected {(video_h, video_w, 3)}")
-            #         continue
-
-            #     # Encode the frame
+                
+            #     # Write the frame
             #     av_frame = av.VideoFrame.from_ndarray(contiguous_frame_rgb, format='rgb24')
             #     for packet in stream.encode(av_frame):
             #         container.mux(packet)
-            #     if idx % 5 == 0 or idx == total_frames - 1:
-            #         progress_bar.progress((idx + 1) / total_frames, f"Processing frame {idx + 1}/{total_frames}")
 
-            # # Flush encoder
+            #     if idx % 5 == 0 or idx == total_frames - 1:
+            #         progress_bar.progress((idx + 1) / total_frames, f"Testing frame {idx + 1}/{total_frames}")
+            
+            # # Flush and close
             # for packet in stream.encode():
             #     container.mux(packet)
             # container.close()
+            # Cloud: Process and write each frame sequentially to save memory
+            progress_bar = st.progress(0, "Processing and encoding video (cloud mode)...")
+            container = av.open(output_video_path, mode='w')
+            stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
+            stream.width = video_w
+            stream.height = video_h
+            stream.pix_fmt = 'yuv420p'
+            stream.options = {'crf': '18', 'g': '1'}
+
+            vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            for idx in range(total_frames):
+                success, original_frame = vid_capture.read()
+                if not success or original_frame is None:
+                    st.warning(f"⚠️ Could not read frame {idx}. Skipping.")
+                    continue
+
+                # Create a defensive copy to guarantee it's a new, isolated object in memory.
+                frame_to_process = original_frame.copy()
+
+                # Pass the pristine copy to the processing function
+                # _, processed_frame = process_frame((idx, frame_to_process))
+                _, processed_frame = process_frame((idx, frame_to_process))
+
+                if processed_frame is None:
+                    st.warning(f"⚠️ Processing failed for frame {idx}. Re-using original frame.")
+                    processed_frame = original_frame # Fallback to the original frame to prevent flicker/gaps
+
+                # --- Robust Conversion for PyAV ---
+                # 1. Ensure the processed frame is uint8
+                if processed_frame.dtype != np.uint8:
+                    processed_frame = processed_frame.clip(0, 255).astype(np.uint8)
+
+                # 2. Ensure it has 3 channels (it should after process_frame)
+                if processed_frame.ndim != 3 or processed_frame.shape[2] != 3:
+                    st.warning(f"⚠️ Processed frame {idx} has wrong dimensions {processed_frame.shape}. Skipping.")
+                    continue
+
+                # 3. **Crucially, convert the final BGR frame to RGB for PyAV**
+                try:
+                    frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
+                except cv2.error as e:
+                    st.error(f"Error converting frame {idx} to RGB: {e}")
+                    continue
+
+                # Ensure the frame data is in a C-contiguous block of memory for PyAV.
+                contiguous_frame_rgb = np.ascontiguousarray(frame_rgb)
+
+                # Double-check shape before writing
+                if contiguous_frame_rgb.shape != (video_h, video_w, 3):
+                    print(f"Skipping frame {idx}: shape mismatch {contiguous_frame_rgb.shape} vs expected {(video_h, video_w, 3)}")
+                    continue
+
+                # Encode the frame
+                av_frame = av.VideoFrame.from_ndarray(contiguous_frame_rgb, format='rgb24')
+                for packet in stream.encode(av_frame):
+                    container.mux(packet)
+                if idx % 5 == 0 or idx == total_frames - 1:
+                    progress_bar.progress((idx + 1) / total_frames, f"Processing frame {idx + 1}/{total_frames}")
+
+            # Flush encoder
+            for packet in stream.encode():
+                container.mux(packet)
+            container.close()
 
         # --- 3. CLEANUP AND DISPLAY ---
         vid_capture.release()
