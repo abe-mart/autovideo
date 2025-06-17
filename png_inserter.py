@@ -10,17 +10,14 @@ import av
 from fractions import Fraction
 import requests
 import urllib.parse
+import platform
 
 # Set page layout to wide for a better experience
 st.set_page_config(layout="wide")
 
 def is_streamlit_cloud():
-    # Try both known indicators
-    return (
-        os.environ.get("STREMLIT_ENV") == "cloud"
-        or os.environ.get("STREMLIT_SERVER_HEADLESS") == "1"
-        or "STREMLIT_RUNTIME" in os.environ
-    )
+    # On Streamlit Cloud, platform.processor() is usually empty
+    return platform.processor() == ""
 
 def calculate_image_placement(image_size, target_corners, padding_percent=0.05):
     """
