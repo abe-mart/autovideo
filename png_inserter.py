@@ -200,6 +200,9 @@ if uploaded_image: # Check for the new variable name
                     warped_image = cv2.warpPerspective(
                         image_to_insert, M, (video_w, video_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT
                     )
+
+                    # SANITIZE THE FRAME: Force a new, clean copy in memory
+                    warped_image = np.copy(warped_image)
                     
                     # Perform blending
                     alpha = warped_image[:, :, 3:4].astype(np.float32) / 255.0
@@ -388,8 +391,8 @@ if uploaded_image: # Check for the new variable name
 
                 # Pass the pristine copy to the processing function
                 # _, processed_frame = process_frame((idx, frame_to_process))
-                processed_frame = process_frame_test2((idx, frame_to_process))
-                # _, processed_frame = process_frame((idx, frame_to_process))
+                # processed_frame = process_frame_test2((idx, frame_to_process))
+                _, processed_frame = process_frame((idx, frame_to_process))
 
                 if processed_frame is None:
                     st.warning(f"⚠️ Processing failed for frame {idx}. Re-using original frame.")
