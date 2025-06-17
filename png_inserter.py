@@ -98,12 +98,6 @@ Upload the PNG image you want to insert.
 # Create three columns for the file uploaders for a clean layout
 col1, col2, col3 = st.columns(3)
 
-# with col1:
-#     uploaded_video = st.file_uploader("1. Choose the original video file", type=["mp4", "mov", "avi"])
-
-# with col2:
-#     uploaded_json = st.file_uploader("2. Choose the coordinates JSON file", type=["json"])
-
 json_url = gdrive_to_direct("https://drive.google.com/file/d/1lYMB_tMXu-o0DrheDvIKUee7SVWfCTm3/view?usp=sharing")
 video_url = gdrive_to_direct("https://drive.google.com/file/d/1ei8BJGEf0EIjSy6ggntJs4Rv86mNeuAx/view?usp=sharing")
 
@@ -174,10 +168,6 @@ if uploaded_image: # Check for the new variable name
             image_base = os.path.splitext(uploaded_image.name)[0]
             output_filename = f"{video_base}__{image_base}.mp4"
             output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
-            # fourcc = cv2.VideoWriter_fourcc(*'VP80')
-            # out = cv2.VideoWriter(output_video_path, fourcc, fps, (video_w, video_h))
-
-        # --- 2. FRAME-BY-FRAME PROCESSING (PARALLELIZED) ---
 
         def process_frame(args):
             """
@@ -217,34 +207,6 @@ if uploaded_image: # Check for the new variable name
             # return the original, untouched frame.
             return frame_num, frame
         
-        # def process_frame_test2(args):
-        #     """
-        #     Test Function 2: Isolates the alpha blending operation.
-        #     It bypasses warping and blends a simple, static red rectangle.
-        #     """
-        #     frame_num, frame = args
-            
-        #     # Create a simple, static RGBA image to blend. 
-        #     # This replaces the warped_image from your original function.
-        #     overlay = np.zeros((video_h, video_w, 4), dtype=np.uint8)
-            
-        #     # Draw a semi-transparent red rectangle (B, G, R, A)
-        #     # Position: x=100, y=100, width=400, height=300
-        #     # Color: Red (0, 0, 255) with 50% alpha (128)
-        #     overlay[100:400, 100:500] = (0, 0, 255, 128) 
-                                            
-        #     # --- Perform the exact same blending logic as before ---
-        #     # Convert to float for calculation
-        #     overlay_alpha = overlay[:, :, 3:4].astype(np.float32) / 255.0
-        #     overlay_bgr = overlay[:, :, :3]
-            
-        #     # Calculate inverse alpha
-        #     inv_alpha = 1.0 - overlay_alpha
-
-        #     # Create the blended frame
-        #     blended_frame = (frame.astype(np.float32) * inv_alpha + overlay_bgr.astype(np.float32) * overlay_alpha).astype(np.uint8)
-            
-        #     return blended_frame
 
         def process_frame_with_pillow(args):
             """
@@ -346,88 +308,6 @@ if uploaded_image: # Check for the new variable name
                 container.mux(packet)
             container.close()
         else:
-            # # Use a simple codec for this test. MJPEG is good.
-            # container = av.open(output_video_path, mode='w')
-            # # stream = container.add_stream('mjpeg', rate=Fraction(fps).limit_denominator())
-            # # stream.width = video_w
-            # # stream.height = video_h
-            # # stream.pix_fmt = 'yuvj420p'
-            # # stream.options = {'q:v': '2'}
-            # stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
-            # stream.width = video_w
-            # stream.height = video_h
-            # stream.pix_fmt = 'yuv420p'
-            # stream.options = {'crf': '18'}
-
-            # vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            # progress_bar = st.progress(0, "Running Test 1: Basic Read/Write...")
-
-            # for idx in range(total_frames):
-            #     success, frame = vid_capture.read()
-            #     if not success or frame is None:
-            #         continue
-
-            #     # --- WE ARE SKIPPING ALL OF YOUR CUSTOM FRAME PROCESSING ---
-            #     # We are not calling process_frame(). We are just passing the frame through.
-            #     processed_frame = frame.copy() # Use a copy just in case
-
-            #     # Convert BGR to RGB for PyAV
-            #     frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                
-            #     # Ensure contiguous memory
-            #     contiguous_frame_rgb = np.ascontiguousarray(frame_rgb)
-                
-            #     # Write the frame
-            #     av_frame = av.VideoFrame.from_ndarray(contiguous_frame_rgb, format='rgb24')
-            #     for packet in stream.encode(av_frame):
-            #         container.mux(packet)
-
-            #     if idx % 5 == 0 or idx == total_frames - 1:
-            #         progress_bar.progress((idx + 1) / total_frames, f"Testing frame {idx + 1}/{total_frames}")
-            
-            # # Flush and close
-            # for packet in stream.encode():
-            #     container.mux(packet)
-            # container.close()
-            # Cloud: Process and write each frame sequentially
-            # container = av.open(output_video_path, mode='w')
-            # stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
-            # stream.width = video_w
-            # stream.height = video_h
-            # stream.pix_fmt = 'yuv420p'
-            # stream.options = {'crf': '18'}
-
-            # vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            # progress_bar = st.progress(0, "Running Test 2: Isolate Alpha Blending...")
-
-            # for idx in range(total_frames):
-            #     success, frame = vid_capture.read()
-            #     if not success or frame is None:
-            #         st.warning(f"⚠️ Could not read frame {idx}. Skipping.")
-            #         continue
-
-            #     # --- Use the NEW test function ---
-            #     processed_frame = process_frame_test2((idx, frame))
-
-            #     # --- Convert and Write the Frame ---
-            #     # Convert BGR (OpenCV) to RGB for PyAV
-            #     frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                
-            #     # Ensure contiguous memory
-            #     contiguous_frame_rgb = np.ascontiguousarray(frame_rgb)
-                
-            #     # Write the frame
-            #     av_frame = av.VideoFrame.from_ndarray(contiguous_frame_rgb, format='rgb24')
-            #     for packet in stream.encode(av_frame):
-            #         container.mux(packet)
-
-            #     if idx % 5 == 0 or idx == total_frames - 1:
-            #         progress_bar.progress((idx + 1) / total_frames, f"Testing frame {idx + 1}/{total_frames}")
-            
-            # # Flush and close
-            # for packet in stream.encode():
-            #     container.mux(packet)
-            # container.close()
             # Cloud: Process and write each frame sequentially to save memory
             progress_bar = st.progress(0, "Processing and encoding video (cloud mode)...")
             container = av.open(output_video_path, mode='w')
