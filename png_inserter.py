@@ -11,7 +11,6 @@ from fractions import Fraction
 import requests
 import urllib.parse
 import platform
-from streamlit_image_select import image_select
 
 # Set page layout to wide for a better experience
 st.set_page_config(layout="wide")
