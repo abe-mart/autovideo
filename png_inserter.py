@@ -8,7 +8,8 @@ import os
 import concurrent.futures
 import av
 from fractions import Fraction
-
+import requests
+import urllib.parse
 
 # Set page layout to wide for a better experience
 st.set_page_config(layout="wide")
@@ -71,6 +72,15 @@ def calculate_image_placement(image_size, target_corners, padding_percent=0.05):
 
     return dest_corners
 
+def gdrive_to_direct(url):
+    # Extract file ID from Google Drive share URL
+    import re
+    m = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
+    if not m:
+        return url  # fallback: return as-is
+    file_id = m.group(1)
+    return f"https://drive.google.com/uc?export=download&id={file_id}"
+
 st.title("Mockup Creator")
 st.write("""
 Upload your video, the corresponding coordinates JSON file, and the PNG image you want to insert.
@@ -79,24 +89,43 @@ Upload your video, the corresponding coordinates JSON file, and the PNG image yo
 # Create three columns for the file uploaders for a clean layout
 col1, col2, col3 = st.columns(3)
 
+# with col1:
+#     uploaded_video = st.file_uploader("1. Choose the original video file", type=["mp4", "mov", "avi"])
+
+# with col2:
+#     uploaded_json = st.file_uploader("2. Choose the coordinates JSON file", type=["json"])
+
+json_url = gdrive_to_direct("https://drive.google.com/file/d/1lYMB_tMXu-o0DrheDvIKUee7SVWfCTm3/view?usp=sharing")
+video_url = gdrive_to_direct("https://drive.google.com/file/d/1ei8BJGEf0EIjSy6ggntJs4Rv86mNeuAx/view?usp=sharing")
+
 with col1:
-    uploaded_video = st.file_uploader("1. Choose the original video file", type=["mp4", "mov", "avi"])
-
-with col2:
-    uploaded_json = st.file_uploader("2. Choose the coordinates JSON file", type=["json"])
-
-with col3:
     uploaded_image = st.file_uploader("3. Choose the PNG/JPG file to insert", type=["png", "jpg", "jpeg"])
 
-if uploaded_video and uploaded_json and uploaded_image: # Check for the new variable name
+if uploaded_image: # Check for the new variable name
     st.success("All files uploaded! Ready to process.")
 
     if st.button("🚀 Generate Final Video", type="primary"):
         # --- 1. PRE-PROCESSING AND SETUP ---
         with st.spinner("Preparing assets..."):
             # Load data
-            video_bytes = uploaded_video.getvalue()
-            coords_data = json.load(uploaded_json)
+            # video_bytes = uploaded_video.getvalue()
+            # coords_data = json.load(uploaded_json)
+
+            # Download video to a temp file
+            video_response = requests.get(video_url, stream=True)
+            video_response.raise_for_status()
+            tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+            for chunk in video_response.iter_content(chunk_size=8192):
+                tfile.write(chunk)
+            tfile.flush()
+            tfile.seek(0)
+            video_bytes = tfile.read()
+            tfile.seek(0)
+
+            # Download JSON
+            json_response = requests.get(json_url)
+            json_response.raise_for_status()
+            coords_data = json_response.json()
 
             # --- Simplified Image Handling ---
             # Open the uploaded PNG/JPG with Pillow and ensure it has an alpha channel (RGBA)
@@ -132,7 +161,7 @@ if uploaded_video and uploaded_json and uploaded_image: # Check for the new vari
             
             # Setup video writer for output
             # output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
-            video_base = os.path.splitext(uploaded_video.name)[0]
+            video_base = os.path.splitext(os.path.basename(urllib.parse.urlparse(video_url).path))[0]
             image_base = os.path.splitext(uploaded_image.name)[0]
             output_filename = f"{video_base}__{image_base}.mp4"
             output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
