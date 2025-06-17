@@ -11,6 +11,7 @@ from fractions import Fraction
 import requests
 import urllib.parse
 import platform
+from streamlit_image_select import image_select
 
 # Set page layout to wide for a better experience
 st.set_page_config(layout="wide")
@@ -86,6 +87,30 @@ def gdrive_to_direct(url):
     file_id = m.group(1)
     return f"https://drive.google.com/uc?export=download&id={file_id}"
 
+@st.cache_data(show_spinner="Extracting video thumbnails...")
+def get_video_thumbnail(video_url):
+    try:
+        video_response = requests.get(video_url, stream=True)
+        video_response.raise_for_status()
+        # Write to temp file, then close before reading with OpenCV
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        for chunk in video_response.iter_content(chunk_size=8192):
+            tfile.write(chunk)
+        tfile.flush()
+        tfile.close()  # <-- Ensure file is closed before OpenCV reads it
+
+        cap = cv2.VideoCapture(tfile.name)
+        success, frame = cap.read()
+        cap.release()
+        os.unlink(tfile.name)
+        if success and frame is not None:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(frame_rgb)
+            return pil_img
+    except Exception as e:
+        print(f"Thumbnail extraction failed: {e}")
+    return Image.new("RGB", (180, 100), color="gray")
+
 st.title("Video Mockup Creator")
 # if is_streamlit_cloud():
 #     st.info("Running on Streamlit Cloud")
@@ -98,8 +123,37 @@ Upload the PNG image you want to insert.
 # Create three columns for the file uploaders for a clean layout
 col1, col2, col3 = st.columns(3)
 
-json_url = gdrive_to_direct("https://drive.google.com/file/d/1lYMB_tMXu-o0DrheDvIKUee7SVWfCTm3/view?usp=sharing")
-video_url = gdrive_to_direct("https://drive.google.com/file/d/1ei8BJGEf0EIjSy6ggntJs4Rv86mNeuAx/view?usp=sharing")
+video_json_pairs = [
+    (
+        gdrive_to_direct("https://drive.google.com/file/d/1ei8BJGEf0EIjSy6ggntJs4Rv86mNeuAx/view?usp=sharing"),
+        gdrive_to_direct("https://drive.google.com/file/d/1lYMB_tMXu-o0DrheDvIKUee7SVWfCTm3/view?usp=sharing")
+    ),
+    (
+        gdrive_to_direct("https://drive.google.com/file/d/1ei8BJGEf0EIjSy6ggntJs4Rv86mNeuAx/view?usp=sharing"),
+        gdrive_to_direct("https://drive.google.com/file/d/1lYMB_tMXu-o0DrheDvIKUee7SVWfCTm3/view?usp=sharing")
+    )
+    # Add more pairs as needed
+    # ("video_url_2", "json_url_2"),
+]
+
+# --- 2. Fetch the first frame of each video ---
+first_frames = [get_video_thumbnail(video_url) for video_url, _ in video_json_pairs]
+
+# --- 3. Let user select a video by its first frame ---
+st.write("Select a Mockup Background:")
+if 'selected_idx' not in st.session_state:
+    st.session_state.selected_idx = 0
+
+cols = st.columns(len(first_frames))
+for i, (col, thumb) in enumerate(zip(cols, first_frames)):
+    with col:
+        st.image(thumb, caption=f"Video {i+1}", use_container_width=True)
+        if st.button(f"Select Video {i+1}", key=f"select_{i}"):
+            st.session_state.selected_idx = i
+
+selected_idx = st.session_state.selected_idx
+video_url, json_url = video_json_pairs[selected_idx]
+st.info(f"**Selected Video:** Video {selected_idx + 1}")
 
 with col1:
     uploaded_image = st.file_uploader("3. Choose the PNG/JPG file to insert", type=["png", "jpg", "jpeg"])
