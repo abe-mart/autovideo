@@ -248,15 +248,13 @@ if uploaded_image: # Check for the new variable name
 
         def process_frame_with_pillow(args):
             """
-            Processes a single frame using the Pillow library.
-            This version uses Pillow's robust, built-in method to find the
-            perspective transform, avoiding the previous matrix inversion error.
+            Processes a single frame using a hybrid OpenCV-Pillow approach.
+            - Uses OpenCV to reliably calculate the transform matrix.
+            - Uses Pillow to reliably perform the warp, avoiding visual artifacts.
             """
             frame_num, frame_bgr = args
+            final_frame_bgr = frame_bgr # Default to the original frame
             frame_key = str(frame_num)
-
-            # Always start with the original frame. We'll only replace it if processing succeeds.
-            final_frame_bgr = frame_bgr
 
             if frame_key in coords_data:
                 try:
@@ -264,39 +262,42 @@ if uploaded_image: # Check for the new variable name
                     dest_corners = calculate_image_placement((img_w, img_h), tracked_corners, padding_percent=0.05)
                     
                     if dest_corners is not None:
-                        # 1. Prepare corner-point data for Pillow
-                        # Pillow needs the points as a flat tuple of 8 values.
-                        src_quad = tuple(image_src_corners.flatten())
-                        dest_quad = tuple(dest_corners.flatten())
+                        # 1. Use OpenCV to get the 3x3 perspective transform matrix.
+                        # This part is stable and works correctly.
+                        M = cv2.getPerspectiveTransform(image_src_corners, dest_corners)
 
-                        # 2. Calculate the transformation using Pillow's robust internal method
-                        # This replaces the buggy find_coeffs() function.
-                        coeffs = Image.getperspective(src_quad, dest_quad)
-                        
-                        # 3. Convert inputs to Pillow Image objects
-                        # Frame (BGR -> RGB) and Image-to-insert (BGRA -> RGBA)
-                        frame_pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)).convert("RGBA")
+                        # 2. Convert the OpenCV matrix M to the 8-tuple of coefficients Pillow needs.
+                        # Pillow's transform is the inverse of OpenCV's, so we must invert M.
+                        M_inv = np.linalg.inv(M)
+                        # Normalize and flatten the matrix into the required format.
+                        coeffs = M_inv.flatten() / M_inv[2, 2]
+                        coeffs = tuple(coeffs[:8])
+
+                        # 3. Convert image assets to Pillow format
                         img_to_insert_pil = Image.fromarray(cv2.cvtColor(image_to_insert, cv2.COLOR_BGRA2RGBA))
-
-                        # 4. Perform the warp using Pillow
+                        
+                        # 4. Perform the warp using Pillow's stable transform method
                         warped_image_pil = img_to_insert_pil.transform(
-                            (video_w, video_h),
-                            Image.PERSPECTIVE,
+                            (video_w, video_h), # Output size
+                            Image.Transform.PERSPECTIVE, # The correct enum for perspective
                             coeffs,
-                            Image.BICUBIC
+                            Image.Resampling.BICUBIC # High quality resampling
                         )
 
                         # 5. Blend the images using Pillow's safe alpha compositing
+                        frame_pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)).convert("RGBA")
                         final_frame_pil = Image.alpha_composite(frame_pil, warped_image_pil)
 
-                        # 6. Convert back to BGR numpy array for video encoding
+                        # 6. Convert final image back to OpenCV format for the video writer
                         final_frame_bgr = cv2.cvtColor(np.array(final_frame_pil), cv2.COLOR_RGBA2BGR)
 
+                except np.linalg.LinAlgError:
+                    # This will catch the "Singular matrix" error if the coordinates are degenerate.
+                    print(f"Failed to calculate transform on frame {frame_num}. Using original frame.")
+                    pass
                 except Exception as e:
-                    # If any error occurs during the Pillow processing for this frame
-                    # (e.g., degenerate coordinates), log it and use the original frame.
+                    # Catch any other unexpected errors during processing.
                     print(f"Pillow processing failed on frame {frame_num}: {e}. Using original frame.")
-                    # final_frame_bgr is already set to the original frame, so we just pass.
                     pass
 
             return frame_num, final_frame_bgr
