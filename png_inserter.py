@@ -258,12 +258,22 @@ if uploaded_image: # Check for the new variable name
         else:
             # Cloud: Process and write each frame sequentially to save memory
             progress_bar = st.progress(0, "Processing and encoding video (cloud mode)...")
+            # container = av.open(output_video_path, mode='w')
+            # stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
+            # stream.width = video_w
+            # stream.height = video_h
+            # stream.pix_fmt = 'yuv420p'
+            # stream.options = {'crf': '18', 'g': '1'}
+            # --- NEW CODE: Use the robust MJPEG codec for debugging ---
             container = av.open(output_video_path, mode='w')
-            stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
+            stream = container.add_stream('mjpeg', rate=Fraction(fps).limit_denominator())
+
             stream.width = video_w
             stream.height = video_h
-            stream.pix_fmt = 'yuv420p'
-            stream.options = {'crf': '18', 'g': '1'}
+
+            # MJPEG uses a different pixel format and quality setting
+            stream.pix_fmt = 'yuvj420p' 
+            stream.options = {'q:v': '2'} # Quality setting, 2-5 is high quality
 
             vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             for idx in range(total_frames):
