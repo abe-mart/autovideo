@@ -204,13 +204,21 @@ if uploaded_image: # Check for the new variable name
                     frame = (frame.astype(np.float32) * inv_alpha + warped_image[:, :, :3].astype(np.float32) * alpha).astype(np.uint8)
             return frame_num, frame
 
-        # 2. Process frames in parallel
+        # 2. Process frames (parallel locally, sequential in cloud)
         processed_frames = [None] * len(frames)
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = {executor.submit(process_frame, (i, frames[i])): i for i in range(len(frames))}
-            for idx, future in enumerate(concurrent.futures.as_completed(futures)):
-                frame_num, processed = future.result()
-                processed_frames[frame_num] = processed
+        if not is_streamlit_cloud():
+            # Local: Use multithreading
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = {executor.submit(process_frame, (i, frames[i])): i for i in range(len(frames))}
+                for idx, future in enumerate(concurrent.futures.as_completed(futures)):
+                    frame_num, processed = future.result()
+                    processed_frames[frame_num] = processed
+                    progress_bar.progress((idx + 1) / len(frames), f"Processing frame {idx + 1}/{len(frames)}")
+        else:
+            # Cloud: Process sequentially to avoid memory/resource issues
+            for idx, frame in enumerate(frames):
+                _, processed = process_frame((idx, frame))
+                processed_frames[idx] = processed
                 progress_bar.progress((idx + 1) / len(frames), f"Processing frame {idx + 1}/{len(frames)}")
 
         # 3. Write frames in order using PyAV
