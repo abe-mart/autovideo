@@ -86,11 +86,11 @@ def gdrive_to_direct(url):
     file_id = m.group(1)
     return f"https://drive.google.com/uc?export=download&id={file_id}"
 
-st.title("Mockup Creator")
-if is_streamlit_cloud():
-    st.info("Running on Streamlit Cloud")
-else:
-    st.info("Running locally")
+st.title("Video Mockup Creator")
+# if is_streamlit_cloud():
+#     st.info("Running on Streamlit Cloud")
+# else:
+#     st.info("Running locally")
 st.write("""
 Upload the PNG image you want to insert.
 """)
