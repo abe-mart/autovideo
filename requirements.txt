@@ -1,0 +1,8 @@
+av==14.4.0
+numpy==2.3.0
+opencv_python_headless==4.11.0.86
+Pillow==11.2.1
+Requests==2.32.4
+scenedetect==0.6.6
+streamlit==1.45.1
+streamlit_image_coordinates==0.3.1
