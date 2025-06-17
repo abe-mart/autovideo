@@ -249,9 +249,25 @@ if uploaded_image: # Check for the new variable name
             vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             for idx in range(total_frames):
                 success, frame = vid_capture.read()
-                if not success:
-                    break
+                if not success or frame is None:
+                    continue  # Skip bad frames
+
                 _, processed = process_frame((idx, frame))
+                if processed is None:
+                    continue  # Defensive: skip if processing failed
+
+                # Ensure 3 channels (BGR)
+                if processed.ndim == 3 and processed.shape[2] == 4:
+                    processed = cv2.cvtColor(processed, cv2.COLOR_BGRA2BGR)
+                elif processed.ndim == 2 or processed.shape[2] != 3:
+                    # Defensive: skip frames with unexpected shape
+                    continue
+
+                # Ensure uint8
+                if processed.dtype != np.uint8:
+                    processed = processed.astype(np.uint8)
+
+                # Convert to RGB for PyAV
                 frame_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
                 av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24')
                 for packet in stream.encode(av_frame):
