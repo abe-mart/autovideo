@@ -258,11 +258,16 @@ if uploaded_image: # Check for the new variable name
         else:
             # Use a simple codec for this test. MJPEG is good.
             container = av.open(output_video_path, mode='w')
-            stream = container.add_stream('mjpeg', rate=Fraction(fps).limit_denominator())
+            # stream = container.add_stream('mjpeg', rate=Fraction(fps).limit_denominator())
+            # stream.width = video_w
+            # stream.height = video_h
+            # stream.pix_fmt = 'yuvj420p'
+            # stream.options = {'q:v': '2'}
+            stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
             stream.width = video_w
             stream.height = video_h
-            stream.pix_fmt = 'yuvj420p'
-            stream.options = {'q:v': '2'}
+            stream.pix_fmt = 'yuv420p'
+            stream.options = {'crf': '18'}
 
             vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             progress_bar = st.progress(0, "Running Test 1: Basic Read/Write...")
