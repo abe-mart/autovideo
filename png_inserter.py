@@ -178,71 +178,91 @@ if uploaded_image: # Check for the new variable name
             # out = cv2.VideoWriter(output_video_path, fourcc, fps, (video_w, video_h))
 
         # --- 2. FRAME-BY-FRAME PROCESSING (PARALLELIZED) ---
-        progress_bar = st.progress(0, "Processing video...")
-
-        # 1. Read all frames into memory (fast, avoids thread-unsafe VideoCapture)
-        frames = []
-        for frame_num in range(total_frames):
-            success, frame = vid_capture.read()
-            if not success:
-                break
-            frames.append(frame)
 
         def process_frame(args):
-            frame_num, frame = args
-            frame_key = str(frame_num)
-            if frame_key in coords_data:
-                tracked_corners = np.array(coords_data[frame_key], dtype=np.float32)
-                dest_corners = calculate_image_placement((img_w, img_h), tracked_corners, padding_percent=0.05)
-                if dest_corners is not None:
-                    M = cv2.getPerspectiveTransform(image_src_corners, dest_corners)
-                    warped_image = cv2.warpPerspective(
-                            image_to_insert, M, (video_w, video_h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_TRANSPARENT
-                        )
-                    alpha = warped_image[:, :, 3:4].astype(np.float32) / 255.0
-                    inv_alpha = 1.0 - alpha
-                    frame = (frame.astype(np.float32) * inv_alpha + warped_image[:, :, :3].astype(np.float32) * alpha).astype(np.uint8)
-            return frame_num, frame
-
-        # 2. Process frames (parallel locally, sequential in cloud)
-        processed_frames = [None] * len(frames)
+                frame_num, frame = args
+                frame_key = str(frame_num)
+                if frame_key in coords_data:
+                    tracked_corners = np.array(coords_data[frame_key], dtype=np.float32)
+                    dest_corners = calculate_image_placement((img_w, img_h), tracked_corners, padding_percent=0.05)
+                    if dest_corners is not None:
+                        M = cv2.getPerspectiveTransform(image_src_corners, dest_corners)
+                        warped_image = cv2.warpPerspective(
+                                image_to_insert, M, (video_w, video_h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_TRANSPARENT
+                            )
+                        alpha = warped_image[:, :, 3:4].astype(np.float32) / 255.0
+                        inv_alpha = 1.0 - alpha
+                        frame = (frame.astype(np.float32) * inv_alpha + warped_image[:, :, :3].astype(np.float32) * alpha).astype(np.uint8)
+                return frame_num, frame
+        
+        # 1. Read all frames into memory (fast, avoids thread-unsafe VideoCapture)
         if not is_streamlit_cloud():
-            # Local: Use multithreading
+            progress_bar = st.progress(0, "Processing video...")
+            frames = []
+            for frame_num in range(total_frames):
+                success, frame = vid_capture.read()
+                if not success:
+                    break
+                frames.append(frame)
+
+            # 2. Process frames in parallel
+            processed_frames = [None] * len(frames)
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = {executor.submit(process_frame, (i, frames[i])): i for i in range(len(frames))}
                 for idx, future in enumerate(concurrent.futures.as_completed(futures)):
                     frame_num, processed = future.result()
                     processed_frames[frame_num] = processed
                     progress_bar.progress((idx + 1) / len(frames), f"Processing frame {idx + 1}/{len(frames)}")
-        else:
-            # Cloud: Process sequentially to avoid memory/resource issues
-            for idx, frame in enumerate(frames):
-                _, processed = process_frame((idx, frame))
-                processed_frames[idx] = processed
-                progress_bar.progress((idx + 1) / len(frames), f"Processing frame {idx + 1}/{len(frames)}")
 
-        # 3. Write frames in order using PyAV
-        progress_bar = st.progress(0, "Encoding video with PyAV...")
-        container = av.open(output_video_path, mode='w')
-        stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
-        stream.width = video_w
-        stream.height = video_h
-        stream.pix_fmt = 'yuv420p'
-        stream.options = {'crf': '18'}  # Lower CRF = higher quality (try 4-10 for best results)
+            # 3. Write frames in order using PyAV
+            progress_bar = st.progress(0, "Encoding video with PyAV...")
+            container = av.open(output_video_path, mode='w')
+            stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
+            stream.width = video_w
+            stream.height = video_h
+            stream.pix_fmt = 'yuv420p'
+            stream.options = {'crf': '18'}  # Lower CRF = higher quality (try 4-10 for best results)
 
-        for idx, frame in enumerate(processed_frames):
-            # Convert BGR (OpenCV) to RGB for PyAV
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24')
-            for packet in stream.encode(av_frame):
+            for idx, frame in enumerate(processed_frames):
+                # Convert BGR (OpenCV) to RGB for PyAV
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24')
+                for packet in stream.encode(av_frame):
+                    container.mux(packet)
+                if idx % 5 == 0 or idx == len(processed_frames) - 1:
+                    progress_bar.progress((idx + 1) / len(processed_frames), f"Encoding frame {idx + 1}/{len(processed_frames)}")
+
+            # Flush encoder
+            for packet in stream.encode():
                 container.mux(packet)
-            if idx % 5 == 0 or idx == len(processed_frames) - 1:
-                progress_bar.progress((idx + 1) / len(processed_frames), f"Encoding frame {idx + 1}/{len(processed_frames)}")
+            container.close()
+        else:
+            # Cloud: Process and write each frame sequentially to save memory
+            progress_bar = st.progress(0, "Processing and encoding video (cloud mode)...")
+            container = av.open(output_video_path, mode='w')
+            stream = container.add_stream('libx264', rate=Fraction(fps).limit_denominator())
+            stream.width = video_w
+            stream.height = video_h
+            stream.pix_fmt = 'yuv420p'
+            stream.options = {'crf': '18'}
 
-        # Flush encoder
-        for packet in stream.encode():
-            container.mux(packet)
-        container.close()
+            vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            for idx in range(total_frames):
+                success, frame = vid_capture.read()
+                if not success:
+                    break
+                _, processed = process_frame((idx, frame))
+                frame_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
+                av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24')
+                for packet in stream.encode(av_frame):
+                    container.mux(packet)
+                if idx % 5 == 0 or idx == total_frames - 1:
+                    progress_bar.progress((idx + 1) / total_frames, f"Processing frame {idx + 1}/{total_frames}")
+
+            # Flush encoder
+            for packet in stream.encode():
+                container.mux(packet)
+            container.close()
 
         # --- 3. CLEANUP AND DISPLAY ---
         vid_capture.release()
