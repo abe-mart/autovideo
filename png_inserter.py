@@ -256,6 +256,8 @@ if uploaded_image: # Check for the new variable name
             final_frame_bgr = frame_bgr # Default to the original frame
             frame_key = str(frame_num)
 
+            print('Processing frame:', frame_num, 'with key:', frame_key)
+
             if frame_key in coords_data:
                 try:
                     tracked_corners = np.array(coords_data[frame_key], dtype=np.float32)
