@@ -180,20 +180,39 @@ if uploaded_image: # Check for the new variable name
         # --- 2. FRAME-BY-FRAME PROCESSING (PARALLELIZED) ---
 
         def process_frame(args):
-                frame_num, frame = args
-                frame_key = str(frame_num)
-                if frame_key in coords_data:
-                    tracked_corners = np.array(coords_data[frame_key], dtype=np.float32)
-                    dest_corners = calculate_image_placement((img_w, img_h), tracked_corners, padding_percent=0.05)
-                    if dest_corners is not None:
-                        M = cv2.getPerspectiveTransform(image_src_corners, dest_corners)
-                        warped_image = cv2.warpPerspective(
-                                image_to_insert, M, (video_w, video_h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_TRANSPARENT
-                            )
-                        alpha = warped_image[:, :, 3:4].astype(np.float32) / 255.0
-                        inv_alpha = 1.0 - alpha
-                        frame = (frame.astype(np.float32) * inv_alpha + warped_image[:, :, :3].astype(np.float32) * alpha).astype(np.uint8)
-                return frame_num, frame
+            """
+            Processes a single frame.
+            If coordinates are found, it blends the image.
+            If not, it returns the original, unmodified frame.
+            """
+            frame_num, frame = args
+            frame_key = str(frame_num)
+
+            if frame_key in coords_data:
+                tracked_corners = np.array(coords_data[frame_key], dtype=np.float32)
+                
+                # Ensure img_w and img_h are available. You may need to pass them as args.
+                # For this example, assuming they are accessible in the scope.
+                dest_corners = calculate_image_placement((img_w, img_h), tracked_corners, padding_percent=0.05)
+                
+                if dest_corners is not None:
+                    M = cv2.getPerspectiveTransform(image_src_corners, dest_corners)
+                    warped_image = cv2.warpPerspective(
+                        image_to_insert, M, (video_w, video_h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_TRANSPARENT
+                    )
+                    
+                    # Perform blending
+                    alpha = warped_image[:, :, 3:4].astype(np.float32) / 255.0
+                    inv_alpha = 1.0 - alpha
+                    
+                    # Create the blended frame
+                    blended_frame = (frame.astype(np.float32) * inv_alpha + warped_image[:, :, :3].astype(np.float32) * alpha).astype(np.uint8)
+                    
+                    return frame_num, blended_frame
+
+            # If coords_data[frame_key] doesn't exist or dest_corners is None,
+            # return the original, untouched frame.
+            return frame_num, frame
         
         # 1. Read all frames into memory (fast, avoids thread-unsafe VideoCapture)
         if not is_streamlit_cloud():
@@ -248,27 +267,20 @@ if uploaded_image: # Check for the new variable name
 
             vid_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             for idx in range(total_frames):
-                success, frame = vid_capture.read()
+                success, original_frame = vid_capture.read()
                 if not success or frame is None:
                     st.warning(f"⚠️ Could not read frame {idx}. Skipping.")
                     continue
 
-                # --- Start of Explicit Processing ---
-                # Ensure the source frame is 3-channel BGR
-                if frame.ndim != 3 or frame.shape[2] != 3:
-                    st.warning(f"⚠️ Frame {idx} has unexpected shape {frame.shape}. Attempting to convert.")
-                    # Attempt to recover if it's grayscale
-                    if frame.ndim == 2:
-                        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-                    else: # Cannot safely recover, skip
-                        continue
-                        
-                # The process_frame function expects a BGR frame and returns a BGR frame
-                _, processed_frame = process_frame((idx, frame))
+                # Create a defensive copy to guarantee it's a new, isolated object in memory.
+                frame_to_process = original_frame.copy()
+
+                # Pass the pristine copy to the processing function
+                _, processed_frame = process_frame((idx, frame_to_process))
 
                 if processed_frame is None:
                     st.warning(f"⚠️ Processing failed for frame {idx}. Re-using original frame.")
-                    processed_frame = frame # Fallback to the original frame to prevent flicker/gaps
+                    processed_frame = original_frame # Fallback to the original frame to prevent flicker/gaps
 
                 # --- Robust Conversion for PyAV ---
                 # 1. Ensure the processed frame is uint8
