@@ -388,7 +388,8 @@ if uploaded_image: # Check for the new variable name
 
                 # Pass the pristine copy to the processing function
                 # _, processed_frame = process_frame((idx, frame_to_process))
-                _, processed_frame = process_frame((idx, frame_to_process))
+                processed_frame = process_frame_test2((idx, frame_to_process))
+                # _, processed_frame = process_frame((idx, frame_to_process))
 
                 if processed_frame is None:
                     st.warning(f"⚠️ Processing failed for frame {idx}. Re-using original frame.")
