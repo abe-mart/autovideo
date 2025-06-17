@@ -217,34 +217,90 @@ if uploaded_image: # Check for the new variable name
             # return the original, untouched frame.
             return frame_num, frame
         
-        def process_frame_test2(args):
-            """
-            Test Function 2: Isolates the alpha blending operation.
-            It bypasses warping and blends a simple, static red rectangle.
-            """
-            frame_num, frame = args
+        # def process_frame_test2(args):
+        #     """
+        #     Test Function 2: Isolates the alpha blending operation.
+        #     It bypasses warping and blends a simple, static red rectangle.
+        #     """
+        #     frame_num, frame = args
             
-            # Create a simple, static RGBA image to blend. 
-            # This replaces the warped_image from your original function.
-            overlay = np.zeros((video_h, video_w, 4), dtype=np.uint8)
+        #     # Create a simple, static RGBA image to blend. 
+        #     # This replaces the warped_image from your original function.
+        #     overlay = np.zeros((video_h, video_w, 4), dtype=np.uint8)
             
-            # Draw a semi-transparent red rectangle (B, G, R, A)
-            # Position: x=100, y=100, width=400, height=300
-            # Color: Red (0, 0, 255) with 50% alpha (128)
-            overlay[100:400, 100:500] = (0, 0, 255, 128) 
+        #     # Draw a semi-transparent red rectangle (B, G, R, A)
+        #     # Position: x=100, y=100, width=400, height=300
+        #     # Color: Red (0, 0, 255) with 50% alpha (128)
+        #     overlay[100:400, 100:500] = (0, 0, 255, 128) 
                                             
-            # --- Perform the exact same blending logic as before ---
-            # Convert to float for calculation
-            overlay_alpha = overlay[:, :, 3:4].astype(np.float32) / 255.0
-            overlay_bgr = overlay[:, :, :3]
+        #     # --- Perform the exact same blending logic as before ---
+        #     # Convert to float for calculation
+        #     overlay_alpha = overlay[:, :, 3:4].astype(np.float32) / 255.0
+        #     overlay_bgr = overlay[:, :, :3]
             
-            # Calculate inverse alpha
-            inv_alpha = 1.0 - overlay_alpha
+        #     # Calculate inverse alpha
+        #     inv_alpha = 1.0 - overlay_alpha
 
-            # Create the blended frame
-            blended_frame = (frame.astype(np.float32) * inv_alpha + overlay_bgr.astype(np.float32) * overlay_alpha).astype(np.uint8)
+        #     # Create the blended frame
+        #     blended_frame = (frame.astype(np.float32) * inv_alpha + overlay_bgr.astype(np.float32) * overlay_alpha).astype(np.uint8)
             
-            return blended_frame
+        #     return blended_frame
+
+        def find_coeffs(pa, pb):
+            """Helper function to calculate perspective transform coeffs for Pillow"""
+            matrix = []
+            for i in range(8):
+                p1 = pa[i // 2]
+                p2 = pb[i % 4]
+                matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0]*p1[0], -p2[0]*p1[1]])
+                matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1]*p1[0], -p2[1]*p1[1]])
+
+            A = np.matrix(matrix, dtype=np.float32)
+            B = np.array(pb).reshape(8)
+            
+            # Solve for the coefficients
+            res = np.dot(np.linalg.inv(A.T * A) * A.T, B)
+            return np.array(res).reshape(8)
+
+        def process_frame_with_pillow(args):
+            """
+            Processes a single frame using the Pillow library for warping and blending
+            to avoid the OpenCV memory corruption bug.
+            """
+            frame_num, frame_bgr = args
+            frame_key = str(frame_num)
+
+            if frame_key in coords_data:
+                tracked_corners = np.array(coords_data[frame_key], dtype=np.float32)
+                dest_corners = calculate_image_placement((img_w, img_h), tracked_corners, padding_percent=0.05)
+                
+                if dest_corners is not None:
+                    # 1. Convert inputs to Pillow Image objects
+                    # Frame (BGR -> RGB) and Image-to-insert (BGRA -> RGBA)
+                    frame_pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)).convert("RGBA")
+                    img_to_insert_pil = Image.fromarray(cv2.cvtColor(image_to_insert, cv2.COLOR_BGRA2RGBA))
+
+                    # 2. Calculate perspective transform coefficients for Pillow
+                    # image_src_corners is the rectangle [0,0], [w,0], [w,h], [0,h]
+                    coeffs = find_coeffs(dest_corners, image_src_corners)
+
+                    # 3. Perform the warp using Pillow
+                    warped_image_pil = img_to_insert_pil.transform(
+                        (video_w, video_h),
+                        Image.PERSPECTIVE,
+                        coeffs,
+                        Image.BICUBIC # High quality resampling
+                    )
+
+                    # 4. Blend the images using Pillow's safe alpha compositing
+                    final_frame_pil = Image.alpha_composite(frame_pil, warped_image_pil)
+
+                    # 5. Convert back to BGR numpy array for video encoding
+                    final_frame_bgr = cv2.cvtColor(np.array(final_frame_pil), cv2.COLOR_RGBA2BGR)
+                    return frame_num, final_frame_bgr
+
+            # If no coordinates, return the original, untouched frame
+            return frame_num, frame_bgr
         
         # 1. Read all frames into memory (fast, avoids thread-unsafe VideoCapture)
         if not is_streamlit_cloud():
@@ -392,7 +448,7 @@ if uploaded_image: # Check for the new variable name
                 # Pass the pristine copy to the processing function
                 # _, processed_frame = process_frame((idx, frame_to_process))
                 # processed_frame = process_frame_test2((idx, frame_to_process))
-                _, processed_frame = process_frame((idx, frame_to_process))
+                _, processed_frame = process_frame_with_pillow((idx, frame_to_process))
 
                 if processed_frame is None:
                     st.warning(f"⚠️ Processing failed for frame {idx}. Re-using original frame.")
