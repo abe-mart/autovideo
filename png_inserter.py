@@ -299,13 +299,16 @@ if uploaded_image: # Check for the new variable name
                     st.error(f"Error converting frame {idx} to RGB: {e}")
                     continue
 
-                # 4. Final shape check before encoding
-                if frame_rgb.shape != (video_h, video_w, 3):
-                    st.warning(f"Frame {idx} shape mismatch: {frame_rgb.shape} vs {(video_h, video_w, 3)}. Skipping.")
+                # Ensure the frame data is in a C-contiguous block of memory for PyAV.
+                contiguous_frame_rgb = np.ascontiguousarray(frame_rgb)
+
+                # Double-check shape before writing
+                if contiguous_frame_rgb.shape != (video_h, video_w, 3):
+                    print(f"Skipping frame {idx}: shape mismatch {contiguous_frame_rgb.shape} vs expected {(video_h, video_w, 3)}")
                     continue
 
                 # Encode the frame
-                av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24')
+                av_frame = av.VideoFrame.from_ndarray(contiguous_frame_rgb, format='rgb24')
                 for packet in stream.encode(av_frame):
                     container.mux(packet)
                 if idx % 5 == 0 or idx == total_frames - 1:
