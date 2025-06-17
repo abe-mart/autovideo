@@ -246,61 +246,60 @@ if uploaded_image: # Check for the new variable name
             
         #     return blended_frame
 
-        def find_coeffs(pa, pb):
-            """Helper function to calculate perspective transform coeffs for Pillow"""
-            matrix = []
-            for i in range(8):
-                p1 = pa[i // 2]
-                p2 = pb[i % 4]
-                matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0]*p1[0], -p2[0]*p1[1]])
-                matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1]*p1[0], -p2[1]*p1[1]])
-
-            A = np.matrix(matrix, dtype=np.float32)
-            B = np.array(pb).reshape(8)
-            
-            # Solve for the coefficients
-            res = np.dot(np.linalg.inv(A.T * A) * A.T, B)
-            return np.array(res).reshape(8)
-
         def process_frame_with_pillow(args):
             """
-            Processes a single frame using the Pillow library for warping and blending
-            to avoid the OpenCV memory corruption bug.
+            Processes a single frame using the Pillow library.
+            This version uses Pillow's robust, built-in method to find the
+            perspective transform, avoiding the previous matrix inversion error.
             """
             frame_num, frame_bgr = args
             frame_key = str(frame_num)
 
+            # Always start with the original frame. We'll only replace it if processing succeeds.
+            final_frame_bgr = frame_bgr
+
             if frame_key in coords_data:
-                tracked_corners = np.array(coords_data[frame_key], dtype=np.float32)
-                dest_corners = calculate_image_placement((img_w, img_h), tracked_corners, padding_percent=0.05)
-                
-                if dest_corners is not None:
-                    # 1. Convert inputs to Pillow Image objects
-                    # Frame (BGR -> RGB) and Image-to-insert (BGRA -> RGBA)
-                    frame_pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)).convert("RGBA")
-                    img_to_insert_pil = Image.fromarray(cv2.cvtColor(image_to_insert, cv2.COLOR_BGRA2RGBA))
+                try:
+                    tracked_corners = np.array(coords_data[frame_key], dtype=np.float32)
+                    dest_corners = calculate_image_placement((img_w, img_h), tracked_corners, padding_percent=0.05)
+                    
+                    if dest_corners is not None:
+                        # 1. Prepare corner-point data for Pillow
+                        # Pillow needs the points as a flat tuple of 8 values.
+                        src_quad = tuple(image_src_corners.flatten())
+                        dest_quad = tuple(dest_corners.flatten())
 
-                    # 2. Calculate perspective transform coefficients for Pillow
-                    # image_src_corners is the rectangle [0,0], [w,0], [w,h], [0,h]
-                    coeffs = find_coeffs(dest_corners, image_src_corners)
+                        # 2. Calculate the transformation using Pillow's robust internal method
+                        # This replaces the buggy find_coeffs() function.
+                        coeffs = Image.getperspective(src_quad, dest_quad)
+                        
+                        # 3. Convert inputs to Pillow Image objects
+                        # Frame (BGR -> RGB) and Image-to-insert (BGRA -> RGBA)
+                        frame_pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)).convert("RGBA")
+                        img_to_insert_pil = Image.fromarray(cv2.cvtColor(image_to_insert, cv2.COLOR_BGRA2RGBA))
 
-                    # 3. Perform the warp using Pillow
-                    warped_image_pil = img_to_insert_pil.transform(
-                        (video_w, video_h),
-                        Image.PERSPECTIVE,
-                        coeffs,
-                        Image.BICUBIC # High quality resampling
-                    )
+                        # 4. Perform the warp using Pillow
+                        warped_image_pil = img_to_insert_pil.transform(
+                            (video_w, video_h),
+                            Image.PERSPECTIVE,
+                            coeffs,
+                            Image.BICUBIC
+                        )
 
-                    # 4. Blend the images using Pillow's safe alpha compositing
-                    final_frame_pil = Image.alpha_composite(frame_pil, warped_image_pil)
+                        # 5. Blend the images using Pillow's safe alpha compositing
+                        final_frame_pil = Image.alpha_composite(frame_pil, warped_image_pil)
 
-                    # 5. Convert back to BGR numpy array for video encoding
-                    final_frame_bgr = cv2.cvtColor(np.array(final_frame_pil), cv2.COLOR_RGBA2BGR)
-                    return frame_num, final_frame_bgr
+                        # 6. Convert back to BGR numpy array for video encoding
+                        final_frame_bgr = cv2.cvtColor(np.array(final_frame_pil), cv2.COLOR_RGBA2BGR)
 
-            # If no coordinates, return the original, untouched frame
-            return frame_num, frame_bgr
+                except Exception as e:
+                    # If any error occurs during the Pillow processing for this frame
+                    # (e.g., degenerate coordinates), log it and use the original frame.
+                    print(f"Pillow processing failed on frame {frame_num}: {e}. Using original frame.")
+                    # final_frame_bgr is already set to the original frame, so we just pass.
+                    pass
+
+            return frame_num, final_frame_bgr
         
         # 1. Read all frames into memory (fast, avoids thread-unsafe VideoCapture)
         if not is_streamlit_cloud():
