@@ -83,7 +83,7 @@ def gdrive_to_direct(url):
 
 st.title("Mockup Creator")
 st.write("""
-Upload your video, the corresponding coordinates JSON file, and the PNG image you want to insert.
+Upload the PNG image you want to insert.
 """)
 
 # Create three columns for the file uploaders for a clean layout
@@ -241,4 +241,4 @@ if uploaded_image: # Check for the new variable name
             st.download_button("⬇️ Download Video", f, output_filename, "video/mp4")
 
 else:
-    st.info("Please upload all three files to begin.")
+    st.info("Please upload a file to begin.")
