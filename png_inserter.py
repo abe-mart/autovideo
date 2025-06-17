@@ -15,7 +15,12 @@ import urllib.parse
 st.set_page_config(layout="wide")
 
 def is_streamlit_cloud():
-    return os.environ.get("STREAMLIT_CLOUD") == "true"
+    # Try both known indicators
+    return (
+        os.environ.get("STREMLIT_ENV") == "cloud"
+        or os.environ.get("STREMLIT_SERVER_HEADLESS") == "1"
+        or "STREMLIT_RUNTIME" in os.environ
+    )
 
 def calculate_image_placement(image_size, target_corners, padding_percent=0.05):
     """
