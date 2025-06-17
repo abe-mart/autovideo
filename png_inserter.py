@@ -14,6 +14,9 @@ import urllib.parse
 # Set page layout to wide for a better experience
 st.set_page_config(layout="wide")
 
+def is_streamlit_cloud():
+    return os.environ.get("STREAMLIT_CLOUD") == "true"
+
 def calculate_image_placement(image_size, target_corners, padding_percent=0.05):
     """
     Calculates the placement of an image inside a target quadrilateral,
@@ -82,6 +85,10 @@ def gdrive_to_direct(url):
     return f"https://drive.google.com/uc?export=download&id={file_id}"
 
 st.title("Mockup Creator")
+if is_streamlit_cloud():
+    st.info("Running on Streamlit Cloud")
+else:
+    st.info("Running locally")
 st.write("""
 Upload the PNG image you want to insert.
 """)
