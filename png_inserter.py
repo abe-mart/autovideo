@@ -111,7 +111,7 @@ def get_video_thumbnail(video_url):
         print(f"Thumbnail extraction failed: {e}")
     return Image.new("RGB", (180, 100), color="gray")
 
-st.title("Video Mockup Creator")
+st.title("Video Mockup Mockup Creator")
 # if is_streamlit_cloud():
 #     st.info("Running on Streamlit Cloud")
 # else:
