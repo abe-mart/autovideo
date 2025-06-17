@@ -4,7 +4,7 @@ import numpy as np
 from streamlit_image_coordinates import streamlit_image_coordinates
 from PIL import Image
 import tempfile
-from scenedetect import open_video, SceneManager
+from scenedetect import open_video, SceneManager, AdaptiveDetector
 from scenedetect.detectors import ContentDetector
 import json
 import os
@@ -58,7 +58,7 @@ def detect_shot_boundaries_pysd(video_path):
         video = open_video(video_path)
         scene_manager = SceneManager()
         # ContentDetector is still the right tool for finding hard cuts.
-        scene_manager.add_detector(ContentDetector(threshold=27.0))
+        scene_manager.add_detector(AdaptiveDetector())
         
         # The detect_scenes call is simpler now, just pass the video object.
         scene_manager.detect_scenes(video, show_progress=False)
