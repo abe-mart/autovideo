@@ -250,36 +250,49 @@ if uploaded_image: # Check for the new variable name
             for idx in range(total_frames):
                 success, frame = vid_capture.read()
                 if not success or frame is None:
-                    continue  # Skip bad frames
-
-                _, processed = process_frame((idx, frame))
-                if processed is None:
-                    continue  # Defensive: skip if processing failed
-
-                # --- Robust shape/channel/type handling ---
-                # If BGRA, convert to BGR
-                if processed.ndim == 3 and processed.shape[2] == 4:
-                    processed = cv2.cvtColor(processed, cv2.COLOR_BGRA2BGR)
-                # If grayscale, convert to BGR
-                elif processed.ndim == 2:
-                    processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
-                # If not 3 channels, skip
-                elif processed.ndim != 3 or processed.shape[2] != 3:
-                    print(f"Skipping frame {idx}: unexpected shape {processed.shape}")
+                    st.warning(f"⚠️ Could not read frame {idx}. Skipping.")
                     continue
 
-                # Ensure uint8
-                if processed.dtype != np.uint8:
-                    processed = processed.astype(np.uint8)
+                # --- Start of Explicit Processing ---
+                # Ensure the source frame is 3-channel BGR
+                if frame.ndim != 3 or frame.shape[2] != 3:
+                    st.warning(f"⚠️ Frame {idx} has unexpected shape {frame.shape}. Attempting to convert.")
+                    # Attempt to recover if it's grayscale
+                    if frame.ndim == 2:
+                        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+                    else: # Cannot safely recover, skip
+                        continue
+                        
+                # The process_frame function expects a BGR frame and returns a BGR frame
+                _, processed_frame = process_frame((idx, frame))
 
-                # Convert BGR to RGB for PyAV
-                frame_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
+                if processed_frame is None:
+                    st.warning(f"⚠️ Processing failed for frame {idx}. Re-using original frame.")
+                    processed_frame = frame # Fallback to the original frame to prevent flicker/gaps
 
-                # Double-check shape before writing
+                # --- Robust Conversion for PyAV ---
+                # 1. Ensure the processed frame is uint8
+                if processed_frame.dtype != np.uint8:
+                    processed_frame = processed_frame.clip(0, 255).astype(np.uint8)
+
+                # 2. Ensure it has 3 channels (it should after process_frame)
+                if processed_frame.ndim != 3 or processed_frame.shape[2] != 3:
+                    st.warning(f"⚠️ Processed frame {idx} has wrong dimensions {processed_frame.shape}. Skipping.")
+                    continue
+
+                # 3. **Crucially, convert the final BGR frame to RGB for PyAV**
+                try:
+                    frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
+                except cv2.error as e:
+                    st.error(f"Error converting frame {idx} to RGB: {e}")
+                    continue
+
+                # 4. Final shape check before encoding
                 if frame_rgb.shape != (video_h, video_w, 3):
-                    print(f"Skipping frame {idx}: shape mismatch {frame_rgb.shape} vs expected {(video_h, video_w, 3)}")
+                    st.warning(f"Frame {idx} shape mismatch: {frame_rgb.shape} vs {(video_h, video_w, 3)}. Skipping.")
                     continue
 
+                # Encode the frame
                 av_frame = av.VideoFrame.from_ndarray(frame_rgb, format='rgb24')
                 for packet in stream.encode(av_frame):
                     container.mux(packet)
