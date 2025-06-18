@@ -142,6 +142,10 @@ video_json_pairs = [
     (
         gdrive_to_direct("https://drive.google.com/file/d/11yONEkanqz_ywhCT8V7DnOw_rGGhEPfr/view?usp=sharing"),
         gdrive_to_direct("https://drive.google.com/file/d/1hUByvY72EA1R6O9nEy0J-SQh6_dEPo5_/view?usp=sharing")
+    ),
+    (
+        gdrive_to_direct("https://drive.google.com/file/d/1NXZQOFp39pBquHUL8bdGNs9H1_CE1uXi/view?usp=sharing"),
+        gdrive_to_direct("https://drive.google.com/file/d/17P-upYviQX19jUkQm2D54V4ynyzIeCKQ/view?usp=sharing")
     )
     # Add more pairs as needed
     # ("video_url_2", "json_url_2"),
@@ -152,15 +156,23 @@ first_frames = [get_video_thumbnail(video_url) for video_url, _ in video_json_pa
 
 # --- 3. Let user select a video by its first frame ---
 st.write("Select a Mockup Background:")
+
 if 'selected_idx' not in st.session_state:
     st.session_state.selected_idx = 0
 
-cols = st.columns(len(first_frames))
-for i, (col, thumb) in enumerate(zip(cols, first_frames)):
-    with col:
-        st.image(thumb, caption=f"Video {i+1}", use_container_width=True)
-        if st.button(f"Select Video {i+1}", key=f"select_{i}"):
-            st.session_state.selected_idx = i
+# Set how many columns per row you want
+cols_per_row = 4  # Change this to 4 or 5 for more/less per row
+
+for row_start in range(0, len(first_frames), cols_per_row):
+    cols = st.columns(cols_per_row)
+    for i, col in enumerate(cols):
+        idx = row_start + i
+        if idx >= len(first_frames):
+            break
+        with col:
+            st.image(first_frames[idx], caption=f"Video {idx+1}", use_container_width=True)
+            if st.button(f"Select Video {idx+1}", key=f"select_{idx}"):
+                st.session_state.selected_idx = idx
 
 selected_idx = st.session_state.selected_idx
 video_url, json_url = video_json_pairs[selected_idx]
