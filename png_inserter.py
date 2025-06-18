@@ -142,10 +142,6 @@ video_json_pairs = [
     (
         gdrive_to_direct("https://drive.google.com/file/d/11yONEkanqz_ywhCT8V7DnOw_rGGhEPfr/view?usp=sharing"),
         gdrive_to_direct("https://drive.google.com/file/d/1hUByvY72EA1R6O9nEy0J-SQh6_dEPo5_/view?usp=sharing")
-    ),
-    (
-        gdrive_to_direct("https://drive.google.com/file/d/1NXZQOFp39pBquHUL8bdGNs9H1_CE1uXi/view?usp=sharing"),
-        gdrive_to_direct("https://drive.google.com/file/d/17P-upYviQX19jUkQm2D54V4ynyzIeCKQ/view?usp=sharing")
     )
     # Add more pairs as needed
     # ("video_url_2", "json_url_2"),
